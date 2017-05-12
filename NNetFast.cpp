@@ -1,9 +1,18 @@
 //
+#include "stdafx.h"
+#if (_MSC_VER )
+#pragma once
+#pragma warning(push)
+#pragma warning(disable: 4996)
+
+#include <direct.h>
+#endif
+//
 // CopyRights<GNU Public License>
 //
 // Compiled with windows
-//set MKL_NUM_THREADS=1
-//set OMP_NUM_THREADS=1 
+//set MKL_NUM_THREADS=4
+//set OMP_NUM_THREADS=4 
 //g++ -O3 -DNDEBUG -std=c++14 NNetFast.cpp -o NNetFast.exe  -I"eigenSrc" \
 -I"%mklroot%\include" -I"D:\Software\Software\curl\include" -L"%mklroot%\lib\intel64"\
 -L"D:\Software\Software\curl\lib" -L"C:\Program Files (x86)\Windows Kits\10\Lib\10.0.14393.0\um\x64" \
@@ -73,19 +82,39 @@ struct BiasWts {
 };
 typedef struct BiasWts NNetWts;
 NNetWts BWts;
+
+// Mersenne Twister is a pseudorandom number generator but very slow
+/*
+std::random_device rd;
+std::mt19937 gen{rd()};
+*/
+
+//Works fine on VS/Intel c++ compiler. mingw implementation is deterministic(zero entropy), so same output for every run of the program.
+/*
+std::random_device rd;
+std::default_random_engine gen{ rd() };//seed_seq is to increase the entropy of the generated sequence initialized from multiple numbers
+*/
+
+
+
+//if your system does not have a random device then you can use time(0) as a seed to the random_engine
+
 unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
+std::default_random_engine gen(seed);
 
 
-// using r values referencing  with double && since c++11 for changing original copy
-void RandomShuffle(MatrixXf&& A, VectorXi&& l_in){
+void RandomShuffle(MatrixXf& A, Map<VectorXi> &l_in){
     VectorXi indices = VectorXi::LinSpaced(A.rows(), 0, A.rows());
-     // obtain a time-based seed:
-    seed = std::chrono::system_clock::now().time_since_epoch().count();
-    shuffle (indices.data(), indices.data() + A.rows(), std::default_random_engine(seed));
+    shuffle (indices.data(), indices.data() + A.rows(), gen);
     // Changing  original copy
-    A = indices.asPermutation() * A; 
-    l_in = indices.asPermutation() * l_in;
-} 
+	#pragma omp parallel sections
+	{
+		#pragma omp section
+		A = indices.asPermutation() * A;
+		#pragma omp section
+		l_in = indices.asPermutation() * l_in;
+	}
+}
 
 auto  zerosMatrix = [](NNetWts& temp) {
      //#pragma omp  for
@@ -127,13 +156,13 @@ void backprop(MatrixXf data, MatrixXf lVec, NNetWts& temp){
     }
 }
 
-  MatrixXf createLabelMatrix ( VectorXi l_in){
-      MatrixXf lVec = MatrixXf::Zero((int)l_in.rows(), 10);
-    // divides loop iterations with 
-    //#pragma omp  for
+MatrixXf createLabelMatrix ( VectorXi l_in){
+	MatrixXf lVec = MatrixXf::Zero((int)l_in.rows(), 10);
+	// divides loop iterations with 
+	#pragma omp for
     for (int index = 0 ; index < l_in.rows(); index++){
-        lVec(index, (int)l_in(index)) = 1.0;
-    }
+		lVec(index, (int)l_in(index)) = 1.0;
+	}
     return lVec;
 
 }
@@ -143,7 +172,7 @@ void sgdMiniBatch(MatrixXf data, VectorXi l_in){
     zerosMatrix(temp);
     MatrixXf lVec = createLabelMatrix(l_in);
     backprop(data, lVec, temp);
-    //#pragma omp  for
+	#pragma omp  for
     for(int i = 0;i <BWts.biases.size();i++){
         BWts.weights[i] =  BWts.weights[i] - (eta/ batch_size)* temp.weights[i];
         BWts.biases[i] =  BWts.biases[i] - (eta/ batch_size)* temp.biases[i];   
@@ -152,45 +181,50 @@ void sgdMiniBatch(MatrixXf data, VectorXi l_in){
 }
 
 auto normaldist(float dummy) {
-        std::default_random_engine gen(seed); 
-        std::normal_distribution<float> nd(0.0, 1.0);
-        return nd(gen);
-    };
-
+	std::normal_distribution<float> nd(0.0, 1.0);
+    return nd(gen);
+    }
 
 int main(int argc, char **argv) {
-    //setNbThreads(4);
-    //mkl_set_num_threads (4);
     std::string name = "MnistData";
-    /*
+   // Download is commented. Run it once
+	/*
+    #if (_MSC_VER) 
+    _mkdir(name.c_str());
+    #else
     mkdir(name.c_str());
+    #endif
     download_mnist(name);
     */
-    float * data_ptr = new float[28*28*num_images]{};
+	float * data_ptr = new float[28*28*num_images]{};
     int* labels_ptr = new int[num_images]{};
     ReadTrainMNIST(name, data_ptr, labels_ptr);
-    Map<MatrixXf> traindata(data_ptr, train_num_images, rows * cols);
+	Map<MatrixXf> data(data_ptr, num_images, rows * cols);
+	MatrixXf traindata = data.middleRows(0, train_num_images);
+	MatrixXf testdata = data.middleRows(train_num_images, test_num_images);
     Map<VectorXi> trainl_in(labels_ptr, train_num_images);
-    Map<MatrixXf> testdata(data_ptr + train_num_images  * rows * cols  , test_num_images, 28*28);
-    Map<VectorXi> testl_in(labels_ptr + train_num_images  * rows * cols , test_num_images);
-    //#pragma omp for
+    Map<VectorXi> testl_in(labels_ptr + train_num_images , test_num_images);
+    #pragma omp for
     for(int i=1;i<sizeof(layers)/sizeof(layers[0]);i++){
         // Normal distribution weights
         BWts.weights.push_back(MatrixXf::Zero(layers[i-1], layers[i]).unaryExpr(ptr_fun(normaldist)));
         BWts.biases.push_back(RowVectorXf::Zero(layers[i]).unaryExpr(ptr_fun(normaldist)));
+
         // Naive method to create random float in [-1, 1] then divided by 100
         /*
-        BWts.weights.push_back(MatrixXf::Random(layers[i-1], layers[i]) / 100.0 );
-        BWts.biases.push_back(RowVectorXf::Random(layers[i]) / 100.0 );
-        */
+		BWts.weights.push_back(MatrixXf::Random(layers[i-1], layers[i]) / 100.0 );
+		BWts.biases.push_back(RowVectorXf::Random(layers[i]) / 100.0 );
+		*/
+     
+        
     }
-    // Number of epochs
+    // Number of epochs 
     int epochs =30 ;
-    int  accuracy;
+    int   accuracy;
     clock_t start = clock();
     for(int i=0;i<epochs;i++){
          RandomShuffle(traindata,trainl_in);
-         //#pragma omp for
+         #pragma omp for
          for (int j = 0 ;j <train_num_images; j+= batch_size){
               if(j + batch_size <train_num_images){
                 sgdMiniBatch(traindata.middleRows(j,batch_size),trainl_in.middleRows(j,batch_size));
@@ -215,7 +249,7 @@ int main(int argc, char **argv) {
         }
     
     long int time = (clock() - start);
-     printf("Total time: %f sec, Accuracy: %f %%\n",(float)time/ CLOCKS_PER_SEC,accuracy/10000.0);
+     printf("Total time: %f sec, Accuracy: %f %%\n",(float)time/ CLOCKS_PER_SEC,(float)accuracy/100.0);
     
 }
 
@@ -224,63 +258,74 @@ static size_t my_fwrite(void *buffer, size_t size, size_t nmemb, void *stream)
     struct FtpFile *out=(struct FtpFile *)stream;
     if(out && !out->stream) {
         /* open file for writing */
+        #if (_MSC_VER )
+        errno_t err;
+        err=fopen_s(&out->stream, out->filename, "wb");
+        if(err)
+            return -1; /* failure, can't open file to write */
+        #else
         out->stream=fopen(out->filename, "wb");
         if(!out->stream)
             return -1; /* failure, can't open file to write */
+        #endif
     }
     return fwrite(buffer, size, nmemb, out->stream);
 }
 
 
-inline bool exists (const std::string& name) {
+inline bool exists(const std::string& name) {
     struct stat buffer;
-    return (stat (name.c_str(), &buffer) == 0);
+    return (stat(name.c_str(), &buffer) == 0);
 }
 
-void download_mnist(std::string folder){
+void download_mnist(std::string folder) {
     CURL *curl;
     CURLcode res;
-    auto data = folder;
+    string  data = folder;
     data += kPathSeparator;
     data += "train-images-idx3-ubyte.gz";
-    struct FtpFile training_data={
-            data.c_str(), /* name to store the file as if successful */
-            NULL
+    struct FtpFile training_data = {
+        data.c_str(), /* name to store the file as if successful */
+        NULL
     };
     auto labels = folder;
     labels += kPathSeparator;
     labels += "train-labels-idx1-ubyte.gz";
-    struct FtpFile training_labels={
-            labels.c_str(), /* name to store the file as if successful */
-            NULL
+    struct FtpFile training_labels = {
+        labels.c_str(), /* name to store the file as if successful */
+        NULL
     };
 
 
     curl_global_init(CURL_GLOBAL_DEFAULT);
 
     curl = curl_easy_init();
-    if(curl) {
-        if(not exists(data.substr(0, data.length()-3))){
+    if (curl) {
+        /*
+        * You better replace the URL with one that works!
+        */
+        if (! exists(data.substr(0, data.length() - 3))) {
             curl_easy_setopt(curl, CURLOPT_URL,
-                             "http://yann.lecun.com/exdb/mnist/train-images-idx3-ubyte.gz");
+                "http://yann.lecun.com/exdb/mnist/train-images-idx3-ubyte.gz");
             /* Define our callback to get called when there's data to be written */
             curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, my_fwrite);
             /* Set a pointer to our struct to pass to the callback */
             curl_easy_setopt(curl, CURLOPT_WRITEDATA, &training_data);
             res = curl_easy_perform(curl);
-            if(CURLE_OK != res) {
+            if (CURLE_OK != res) {
+                /* we failed */
                 fprintf(stderr, "curl told us %d\n", res);
             }
         }
-        if(not exists(labels.substr(0, data.length()-3))){
+        if (! exists(labels.substr(0, data.length() - 3))) {
             curl_easy_setopt(curl, CURLOPT_URL,
-                             "http://yann.lecun.com/exdb/mnist/train-labels-idx1-ubyte.gz");
+                "http://yann.lecun.com/exdb/mnist/train-labels-idx1-ubyte.gz");
             /* Define our callback to get called when there's data to be written */
             curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, my_fwrite);
             /* Set a pointer to our struct to pass to the callback */
             curl_easy_setopt(curl, CURLOPT_WRITEDATA, &training_labels);
             res = curl_easy_perform(curl);
-            if(CURLE_OK != res) {
+            if (CURLE_OK != res) {
                 /* we failed */
                 fprintf(stderr, "curl told us %d\n", res);
             }
@@ -289,12 +334,12 @@ void download_mnist(std::string folder){
     /* always cleanup */
     curl_easy_cleanup(curl);
 
-    if(training_data.stream) {
+    if (training_data.stream) {
         fclose(training_data.stream); /* close the local file */
         int res = system(("gzip -d " + data).c_str());
     }
 
-    if(training_labels.stream) {
+    if (training_labels.stream) {
         fclose(training_labels.stream); /* close the local file */
         int res = system(("gzip -d " + labels).c_str());
     }
@@ -302,59 +347,73 @@ void download_mnist(std::string folder){
     curl_global_cleanup();
 }
 
-void ReadTrainMNIST(std::string folder, float* data, int* labels){
-    std::string file_name = folder;
-    file_name += kPathSeparator;
-    file_name += "train-images-idx3-ubyte";
-    std::ifstream file(file_name,std::ios::binary);
-    if (file.is_open())
-    {
-        int magic_number=0;
-        int number_of_images=0;
-        int n_rows=0;
-        int n_cols=0;
-        file.read((char*)&magic_number,sizeof(magic_number));
-        magic_number= ReverseInt(magic_number);
-        file.read((char*)&number_of_images,sizeof(number_of_images));
-        number_of_images= ReverseInt(number_of_images);
-        file.read((char*)&n_rows,sizeof(n_rows));
-        n_rows= ReverseInt(n_rows);
-        file.read((char*)&n_cols,sizeof(n_cols));
-        n_cols= ReverseInt(n_cols);
-        for(int i=0;i<number_of_images;++i)
-        {
-            for(int r=0;r<n_rows;++r)
-            {
-                for(int c=0;c<n_cols;++c)
-                {
-                    unsigned char temp=0;
-                    file.read((char*)&temp,sizeof(temp));
-                    data[(r*cols + c)*num_images + i]= ((float)temp) / float(255.0);
-                    //data[(r*cols + c)*num_images + i]= ((float)temp);
-                }
-            }
-        }
-    }
-    file.close();
-    file_name = folder;
-    file_name += kPathSeparator;
-    file_name += "train-labels-idx1-ubyte";
-    file.open(file_name, std::ios::binary);
-    if (file.is_open())
-    {
-        int magic_number=0;
-        int number_of_images=0;
-        file.read((char*)&magic_number,sizeof(magic_number));
-        magic_number= ReverseInt(magic_number);
-        file.read((char*)&number_of_images,sizeof(number_of_images));
-        number_of_images= ReverseInt(number_of_images);
-        for(int i=0;i<number_of_images;++i)
-        {
-            unsigned char temp=0;
-            file.read((char*)&temp,sizeof(temp));
-            labels[i]= (int)temp;
-        }
-    }
-    file.close();
+void ReadTrainMNIST(std::string folder, float* data, int* labels) {
+	// setNbThreads is used for OpenMP Threads. Use mkl_set_num_threads ( N ) for MKL;
+	#pragma omp parallel sections
+	{
+		#pragma omp section
+		{
+			std::string file_name1 = folder;
+			file_name1 += kPathSeparator;
+			file_name1 += "train-images-idx3-ubyte";
+			std::ifstream file1(file_name1, std::ios::binary);
+			if (file1.is_open())
+			{
+				int magic_number = 0;
+				int number_of_images = 0;
+				int n_rows = 0;
+				int n_cols = 0;
+				file1.read((char*)&magic_number, sizeof(magic_number));
+				magic_number = ReverseInt(magic_number);
+				file1.read((char*)&number_of_images, sizeof(number_of_images));
+				number_of_images = ReverseInt(number_of_images);
+				file1.read((char*)&n_rows, sizeof(n_rows));
+				n_rows = ReverseInt(n_rows);
+				file1.read((char*)&n_cols, sizeof(n_cols));
+				n_cols = ReverseInt(n_cols);
+				//std::cout << number_of_images << ", " << rows << ", " << cols << std::endl;
+				for (int i = 0; i < number_of_images; ++i)
+				{
+					for (int r = 0; r < n_rows; ++r)
+					{
+						for (int c = 0; c < n_cols; ++c)
+						{
+							unsigned char temp = 0;
+							file1.read((char*)&temp, sizeof(temp));
+							data[(r*cols + c)*num_images + i] = ((float)temp) / float(255.0);
+
+						}
+					}
+				}
+			}
+			file1.close();
+		}
+
+		#pragma omp section
+		{
+			std::string file_name2 = folder;
+			file_name2 += kPathSeparator;
+			file_name2 += "train-labels-idx1-ubyte";
+			std::ifstream file2;
+			file2.open(file_name2, std::ios::binary);
+			if (file2.is_open())
+			{
+				int magic_number = 0;
+				int number_of_images = 0;
+				file2.read((char*)&magic_number, sizeof(magic_number));
+				magic_number = ReverseInt(magic_number);
+				file2.read((char*)&number_of_images, sizeof(number_of_images));
+				number_of_images = ReverseInt(number_of_images);
+				//std::cout << number_of_images << std::endl;
+				for (int i = 0; i < number_of_images; ++i)
+				{
+					unsigned char temp = 0;
+					file2.read((char*)&temp, sizeof(temp));
+					labels[i] = (int)temp;
+				}
+			}
+			file2.close();
+		}
+	}
 }
 
