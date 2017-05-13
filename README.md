@@ -1,7 +1,7 @@
 # NNetEigen 
 
-A fast matrix-based approach for computing the output from a Multi layer perceptron neural network using Stochastic gradient descent  
-with MNIST data
+A fast matrix-based approach for learning a Multi layer perceptron neural network of MNIST data using 
+Stochastic gradient descent
 
 ### Usage
 
