@@ -184,7 +184,7 @@ int main(int argc, char **argv) {
     #endif
     download_mnist(name);
     */
-    float * data_ptr = new float[28*28*num_images]{};
+    float * data_ptr = new float[rows* cols * num_images]{};
     int* labels_ptr = new int[num_images]{};
     ReadTrainMNIST(name, data_ptr, labels_ptr);
     Map<MatrixXf> data(data_ptr, num_images, rows * cols);
