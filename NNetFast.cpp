@@ -1,4 +1,3 @@
-//
 #include "stdafx.h"
 #if (_MSC_VER )
 #pragma once
@@ -76,7 +75,7 @@ auto ReverseInt = [](int i) {
         unsigned char c1, c2, c3, c4;
         c1 = i & 255, c2 = (i >> 8) & 255, c3 = (i >> 16) & 255, c4 = (i >> 24) & 255;
         return ((int)c1 << 24) + ((int)c2 << 16) + ((int)c3 << 8) + c4;
- };
+};
 
 static size_t my_fwrite(void *buffer, size_t size, size_t nmemb, void *stream);
 static size_t my_fwrite(void *buffer, size_t size, size_t nmemb, void *stream);
@@ -99,13 +98,13 @@ void RandomShuffle(MatrixXf& A, Map<VectorXi> &l_in){
     VectorXi indices = VectorXi::LinSpaced(A.rows(), 0, A.rows());
     shuffle (indices.data(), indices.data() + A.rows(), gen);
     // Changing  original copy
-	#pragma omp parallel sections
-	{
-		#pragma omp section
-		A = indices.asPermutation() * A;
-		#pragma omp section
-		l_in = indices.asPermutation() * l_in;
-	}
+    #pragma omp parallel sections
+    {
+        #pragma omp section
+        A = indices.asPermutation() * A;
+        #pragma omp section
+        l_in = indices.asPermutation() * l_in;
+    }
 }
 
 auto  zerosMatrix = [](NNetWts& temp) {
@@ -115,13 +114,15 @@ auto  zerosMatrix = [](NNetWts& temp) {
     }
     return 0;
 };
- MatrixXf feedforward (MatrixXf data) {
+ 
+MatrixXf feedforward (MatrixXf data) {
     for(int i = 0;i <BWts.biases.size();i++){
         data = (data * BWts.weights[i]) + BWts.biases[i].replicate((int)data.rows(),1);
         data  = sigmoid(data);
     }
     return data;
 }
+
 void backprop(MatrixXf data, MatrixXf lVec, NNetWts& temp){
     std::vector<MatrixXf> activations;
     activations.push_back(data);
@@ -169,14 +170,14 @@ void sgdMiniBatch(MatrixXf data, VectorXi l_in){
 }
 
 auto normaldist(float dummy) {
-	std::normal_distribution<float> nd(0.0, 1.0);
+    std::normal_distribution<float> nd(0.0, 1.0);
     return nd(gen);
 }
 
 int main(int argc, char **argv) {
     std::string name = "MnistData";
    // Download is commented. Run it once
-	/*
+    /*
     #if (_MSC_VER) 
     _mkdir(name.c_str());
     #else
@@ -218,8 +219,7 @@ int main(int argc, char **argv) {
                   int minBatch = (int)traindata.rows() - j;
                   sgdMiniBatch(traindata.middleRows(j,minBatch),trainl_in.middleRows(j,minBatch));
               }
-         } 
-           
+         }            
          MatrixXf outputVec= feedforward(testdata);
          MatrixXf::Index   maxIndex;
          VectorXf maxVal(test_num_images);
@@ -231,7 +231,6 @@ int main(int argc, char **argv) {
          accuracy = (output.array() == 0).count();
          printf("Epoch:%d, %d / %d\n",i,accuracy,test_num_images);
     }
-    
     long int time = (clock() - start);
     printf("Total time: %f sec, Accuracy: %f %%\n",(float)time/ CLOCKS_PER_SEC,(float)accuracy/100.0);
 }
@@ -327,72 +326,72 @@ void download_mnist(std::string folder) {
 }
 
 void ReadTrainMNIST(std::string folder, float* data, int* labels) {
-	// setNbThreads is used for OpenMP Threads. Use mkl_set_num_threads ( N ) for MKL;
-	#pragma omp parallel sections
-	{
-		#pragma omp section
-		{
-			std::string file_name1 = folder;
-			file_name1 += kPathSeparator;
-			file_name1 += "train-images-idx3-ubyte";
-			std::ifstream file1(file_name1, std::ios::binary);
-			if (file1.is_open())
-			{
-				int magic_number = 0;
-				int number_of_images = 0;
-				int n_rows = 0;
-				int n_cols = 0;
-				file1.read((char*)&magic_number, sizeof(magic_number));
-				magic_number = ReverseInt(magic_number);
-				file1.read((char*)&number_of_images, sizeof(number_of_images));
-				number_of_images = ReverseInt(number_of_images);
-				file1.read((char*)&n_rows, sizeof(n_rows));
-				n_rows = ReverseInt(n_rows);
-				file1.read((char*)&n_cols, sizeof(n_cols));
-				n_cols = ReverseInt(n_cols);
-				//std::cout << number_of_images << ", " << rows << ", " << cols << std::endl;
-				for (int i = 0; i < number_of_images; ++i)
-				{
-					for (int r = 0; r < n_rows; ++r)
-					{
-						for (int c = 0; c < n_cols; ++c)
-						{
-							unsigned char temp = 0;
-							file1.read((char*)&temp, sizeof(temp));
-							data[(r*cols + c)*num_images + i] = ((float)temp) / float(255.0);
+    // setNbThreads is used for OpenMP Threads. Use mkl_set_num_threads ( N ) for MKL;
+    #pragma omp parallel sections
+    {
+        #pragma omp section
+        {
+            std::string file_name1 = folder;
+            file_name1 += kPathSeparator;
+            file_name1 += "train-images-idx3-ubyte";
+            std::ifstream file1(file_name1, std::ios::binary);
+            if (file1.is_open())
+            {
+                int magic_number = 0;
+                int number_of_images = 0;
+                int n_rows = 0;
+                int n_cols = 0;
+                file1.read((char*)&magic_number, sizeof(magic_number));
+                magic_number = ReverseInt(magic_number);
+                file1.read((char*)&number_of_images, sizeof(number_of_images));
+                number_of_images = ReverseInt(number_of_images);
+                file1.read((char*)&n_rows, sizeof(n_rows));
+                n_rows = ReverseInt(n_rows);
+                file1.read((char*)&n_cols, sizeof(n_cols));
+                n_cols = ReverseInt(n_cols);
+                //std::cout << number_of_images << ", " << rows << ", " << cols << std::endl;
+                for (int i = 0; i < number_of_images; ++i)
+                {
+                    for (int r = 0; r < n_rows; ++r)
+                    {
+                        for (int c = 0; c < n_cols; ++c)
+                        {
+                            unsigned char temp = 0;
+                            file1.read((char*)&temp, sizeof(temp));
+                            data[(r*cols + c)*num_images + i] = ((float)temp) / float(255.0);
 
-						}
-					}
-				}
-			}
-			file1.close();
-		}
+                        }
+                    }
+                }
+            }
+            file1.close();
+        }
 
-		#pragma omp section
-		{
-			std::string file_name2 = folder;
-			file_name2 += kPathSeparator;
-			file_name2 += "train-labels-idx1-ubyte";
-			std::ifstream file2;
-			file2.open(file_name2, std::ios::binary);
-			if (file2.is_open())
-			{
-				int magic_number = 0;
-				int number_of_images = 0;
-				file2.read((char*)&magic_number, sizeof(magic_number));
-				magic_number = ReverseInt(magic_number);
-				file2.read((char*)&number_of_images, sizeof(number_of_images));
-				number_of_images = ReverseInt(number_of_images);
-				//std::cout << number_of_images << std::endl;
-				for (int i = 0; i < number_of_images; ++i)
-				{
-					unsigned char temp = 0;
-					file2.read((char*)&temp, sizeof(temp));
-					labels[i] = (int)temp;
-				}
-			}
-			file2.close();
-		}
-	}
+        #pragma omp section
+        {
+            std::string file_name2 = folder;
+            file_name2 += kPathSeparator;
+            file_name2 += "train-labels-idx1-ubyte";
+            std::ifstream file2;
+            file2.open(file_name2, std::ios::binary);
+            if (file2.is_open())
+            {
+                int magic_number = 0;
+                int number_of_images = 0;
+                file2.read((char*)&magic_number, sizeof(magic_number));
+                magic_number = ReverseInt(magic_number);
+                file2.read((char*)&number_of_images, sizeof(number_of_images));
+                number_of_images = ReverseInt(number_of_images);
+                //std::cout << number_of_images << std::endl;
+                for (int i = 0; i < number_of_images; ++i)
+                {
+                    unsigned char temp = 0;
+                    file2.read((char*)&temp, sizeof(temp));
+                    labels[i] = (int)temp;
+                }
+            }
+            file2.close();
+        }
+    }
 }
 
