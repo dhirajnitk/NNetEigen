@@ -4,7 +4,6 @@
 #pragma once
 #pragma warning(push)
 #pragma warning(disable: 4996)
-
 #include <direct.h>
 #endif
 //
@@ -26,20 +25,29 @@
 #include "iostream"
 #include <fstream>
 #include <random>
-#include <chrono>
+#include <chrono>       // std::chrono::system_clock
 using namespace Eigen;
 using namespace std;
 const char kPathSeparator =
 #ifdef _WIN32
-        '\\';
+    '\\';
 #else
-        '/';
+    '/';
 #endif
 
 struct FtpFile {
     const char *filename;
     FILE *stream;
 }; 
+static const int num_images = 60000;
+static const int train_num_images = 50000;
+static const int test_num_images = num_images - train_num_images;
+static const int rows = 28;
+static const int cols = 28;
+static const int batch_size = 10;
+static const int layers[3] = {784, 30,10};
+static const double eta = 3.0;
+static const int epochs = 30 ; // Number of epochs 
 auto ReverseInt = [](int i) {
         unsigned char c1, c2, c3, c4;
         c1 = i & 255, c2 = (i >> 8) & 255, c3 = (i >> 16) & 255, c4 = (i >> 24) & 255;
@@ -49,32 +57,19 @@ auto ReverseInt = [](int i) {
 static size_t my_fwrite(void *buffer, size_t size, size_t nmemb, void *stream);
 static size_t my_fwrite(void *buffer, size_t size, size_t nmemb, void *stream);
 void download_mnist(std::string folder);
-
 void ReadTrainMNIST(std::string folder, float* data, int* labels);
 
-
 inline MatrixXf sigmoid(MatrixXf& input) {
-
     return(1.0 + (-input).array().exp()).inverse().matrix();
 }
 
 inline MatrixXf sigmoidDerivative(MatrixXf& input) {
-
     return sigmoid(input).cwiseProduct((1 - sigmoid(input).array()).matrix()) ;
 }
 
 inline MatrixXf costDerivative(MatrixXf output, MatrixXf y){
     return (output - y);
 }
-static const int num_images = 60000;
-static const int train_num_images = 50000;
-static const int test_num_images = num_images - train_num_images;
-static const int rows = 28;
-static const int cols = 28;
-static const int batch_size = 10;
-static const int layers[3] = {784, 30,10};
-static const double eta = 3.0;
-#include <chrono>       // std::chrono::system_clock
 
 struct BiasWts {
     std::vector<MatrixXf> weights;
@@ -95,13 +90,10 @@ std::random_device rd;
 std::default_random_engine gen{ rd() };//seed_seq is to increase the entropy of the generated sequence initialized from multiple numbers
 */
 
-
-
 //if your system does not have a random device then you can use time(0) as a seed to the random_engine
 
 unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
 std::default_random_engine gen(seed);
-
 
 void RandomShuffle(MatrixXf& A, Map<VectorXi> &l_in){
     VectorXi indices = VectorXi::LinSpaced(A.rows(), 0, A.rows());
@@ -117,19 +109,17 @@ void RandomShuffle(MatrixXf& A, Map<VectorXi> &l_in){
 }
 
 auto  zerosMatrix = [](NNetWts& temp) {
-     //#pragma omp  for
-       for(int i=1;i<sizeof(layers)/sizeof(layers[0]);i++){
-            temp.weights.push_back(MatrixXf::Zero(layers[i-1], layers[i]) );
-            temp.biases.push_back(RowVectorXf::Zero(layers[i]));
-        }
-        return 0;
-    };
+    for(int i=1;i<sizeof(layers)/sizeof(layers[0]);i++){
+        temp.weights.push_back(MatrixXf::Zero(layers[i-1], layers[i]) );
+        temp.biases.push_back(RowVectorXf::Zero(layers[i]));
+    }
+    return 0;
+};
  MatrixXf feedforward (MatrixXf data) {
     for(int i = 0;i <BWts.biases.size();i++){
-            data = (data * BWts.weights[i]) + BWts.biases[i].replicate((int)data.rows(),1);
-            
-            data  = sigmoid(data);
-        }
+        data = (data * BWts.weights[i]) + BWts.biases[i].replicate((int)data.rows(),1);
+        data  = sigmoid(data);
+    }
     return data;
 }
 void backprop(MatrixXf data, MatrixXf lVec, NNetWts& temp){
@@ -139,11 +129,11 @@ void backprop(MatrixXf data, MatrixXf lVec, NNetWts& temp){
     MatrixXf z;
     // Forward pass
     for(int i = 0;i <BWts.biases.size();i++){
-            z = (data * BWts.weights[i]) + BWts.biases[i].replicate((int)data.rows(),1);
-            zs.push_back(z);
-            data  = sigmoid(z);
-            activations.push_back(data);
-        }
+        z = (data * BWts.weights[i]) + BWts.biases[i].replicate((int)data.rows(),1);
+        zs.push_back(z);
+        data  = sigmoid(z);
+        activations.push_back(data);
+    }
     // Backward pass
     MatrixXf delta = costDerivative(activations[activations.size() -1 ], lVec).cwiseProduct(sigmoidDerivative(zs[zs.size() -1 ]));
     temp.biases[BWts.biases.size() -1 ] = delta.colwise().sum();
@@ -157,14 +147,13 @@ void backprop(MatrixXf data, MatrixXf lVec, NNetWts& temp){
 }
 
 MatrixXf createLabelMatrix ( VectorXi l_in){
-	MatrixXf lVec = MatrixXf::Zero((int)l_in.rows(), 10);
-	// divides loop iterations with 
-	#pragma omp for
+    MatrixXf lVec = MatrixXf::Zero((int)l_in.rows(), 10);
+    // divides loop iterations with 
+    #pragma omp for
     for (int index = 0 ; index < l_in.rows(); index++){
-		lVec(index, (int)l_in(index)) = 1.0;
-	}
+        lVec(index, (int)l_in(index)) = 1.0;
+    }
     return lVec;
-
 }
 
 void sgdMiniBatch(MatrixXf data, VectorXi l_in){
@@ -172,12 +161,11 @@ void sgdMiniBatch(MatrixXf data, VectorXi l_in){
     zerosMatrix(temp);
     MatrixXf lVec = createLabelMatrix(l_in);
     backprop(data, lVec, temp);
-	#pragma omp  for
+    #pragma omp  for
     for(int i = 0;i <BWts.biases.size();i++){
         BWts.weights[i] =  BWts.weights[i] - (eta/ batch_size)* temp.weights[i];
         BWts.biases[i] =  BWts.biases[i] - (eta/ batch_size)* temp.biases[i];   
     }
-
 }
 
 auto normaldist(float dummy) {
@@ -196,12 +184,12 @@ int main(int argc, char **argv) {
     #endif
     download_mnist(name);
     */
-	float * data_ptr = new float[28*28*num_images]{};
+    float * data_ptr = new float[28*28*num_images]{};
     int* labels_ptr = new int[num_images]{};
     ReadTrainMNIST(name, data_ptr, labels_ptr);
-	Map<MatrixXf> data(data_ptr, num_images, rows * cols);
-	MatrixXf traindata = data.middleRows(0, train_num_images);
-	MatrixXf testdata = data.middleRows(train_num_images, test_num_images);
+    Map<MatrixXf> data(data_ptr, num_images, rows * cols);
+    MatrixXf traindata = data.middleRows(0, train_num_images);
+    MatrixXf testdata = data.middleRows(train_num_images, test_num_images);
     Map<VectorXi> trainl_in(labels_ptr, train_num_images);
     Map<VectorXi> testl_in(labels_ptr + train_num_images , test_num_images);
     #pragma omp for
@@ -212,14 +200,10 @@ int main(int argc, char **argv) {
 
         // Naive method to create random float in [-1, 1] then divided by 100
         /*
-		BWts.weights.push_back(MatrixXf::Random(layers[i-1], layers[i]) / 100.0 );
-		BWts.biases.push_back(RowVectorXf::Random(layers[i]) / 100.0 );
-		*/
-     
-        
+        BWts.weights.push_back(MatrixXf::Random(layers[i-1], layers[i]) / 100.0 );
+        BWts.biases.push_back(RowVectorXf::Random(layers[i]) / 100.0 );
+        */
     }
-    // Number of epochs 
-    int epochs =30 ;
     int   accuracy;
     clock_t start = clock();
     for(int i=0;i<epochs;i++){
@@ -227,34 +211,32 @@ int main(int argc, char **argv) {
          #pragma omp for
          for (int j = 0 ;j <train_num_images; j+= batch_size){
               if(j + batch_size <train_num_images){
-                sgdMiniBatch(traindata.middleRows(j,batch_size),trainl_in.middleRows(j,batch_size));
+                  sgdMiniBatch(traindata.middleRows(j,batch_size),trainl_in.middleRows(j,batch_size));
 
               }
               else{
-                int minBatch = (int)traindata.rows() - j;
-                sgdMiniBatch(traindata.middleRows(j,minBatch),trainl_in.middleRows(j,minBatch));
+                  int minBatch = (int)traindata.rows() - j;
+                  sgdMiniBatch(traindata.middleRows(j,minBatch),trainl_in.middleRows(j,minBatch));
               }
-            } 
+         } 
            
-              MatrixXf outputVec= feedforward(testdata);
-              MatrixXf::Index   maxIndex;
-              VectorXf maxVal(test_num_images);
-              VectorXi output(test_num_images);
-              for(int k =0;k<test_num_images;++k) {
-                    maxVal(k) = outputVec.row(k).maxCoeff( &maxIndex );
-                    output(k)= (int)maxIndex - testl_in(k);
-                }
-                accuracy = (output.array() == 0).count();
-              printf("Epoch:%d, %d / %d\n",i,accuracy,test_num_images);
-        }
+         MatrixXf outputVec= feedforward(testdata);
+         MatrixXf::Index   maxIndex;
+         VectorXf maxVal(test_num_images);
+         VectorXi output(test_num_images);
+         for(int k =0;k<test_num_images;++k) {
+             maxVal(k) = outputVec.row(k).maxCoeff( &maxIndex );
+             output(k)= (int)maxIndex - testl_in(k);
+         }
+         accuracy = (output.array() == 0).count();
+         printf("Epoch:%d, %d / %d\n",i,accuracy,test_num_images);
+    }
     
     long int time = (clock() - start);
-     printf("Total time: %f sec, Accuracy: %f %%\n",(float)time/ CLOCKS_PER_SEC,(float)accuracy/100.0);
-    
+    printf("Total time: %f sec, Accuracy: %f %%\n",(float)time/ CLOCKS_PER_SEC,(float)accuracy/100.0);
 }
 
-static size_t my_fwrite(void *buffer, size_t size, size_t nmemb, void *stream)
-{
+static size_t my_fwrite(void *buffer, size_t size, size_t nmemb, void *stream){
     struct FtpFile *out=(struct FtpFile *)stream;
     if(out && !out->stream) {
         /* open file for writing */
@@ -295,10 +277,7 @@ void download_mnist(std::string folder) {
         labels.c_str(), /* name to store the file as if successful */
         NULL
     };
-
-
     curl_global_init(CURL_GLOBAL_DEFAULT);
-
     curl = curl_easy_init();
     if (curl) {
         /*
