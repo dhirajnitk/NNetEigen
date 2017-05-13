@@ -47,12 +47,36 @@ static const int cols = 28;
 static const int batch_size = 10;
 static const int layers[3] = {784, 30,10};
 static const double eta = 3.0;
-static const int epochs = 30 ; // Number of epochs 
+static const int epochs = 30 ; // Number of epochs
+struct BiasWts {
+    std::vector<MatrixXf> weights;
+    std::vector<MatrixXf> biases;
+};
+typedef struct BiasWts NNetWts;
+NNetWts BWts;
+// Mersenne Twister is a pseudorandom number generator but very slow
+/*
+std::random_device rd;
+std::mt19937 gen{rd()};
+*/
+
+//Works fine on VS/Intel c++ compiler. mingw implementation is deterministic(zero entropy), so same output for every run of the program.
+/*
+std::random_device rd;
+std::default_random_engine gen{ rd() };//seed_seq is to increase the entropy of the generated sequence initialized from multiple numbers
+*/
+
+//if your system does not have a random device then you can use time(0) as a seed to the random_engine
+
+unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
+std::default_random_engine gen(seed);
+
+//C++ lambda function to reverse integer
 auto ReverseInt = [](int i) {
         unsigned char c1, c2, c3, c4;
         c1 = i & 255, c2 = (i >> 8) & 255, c3 = (i >> 16) & 255, c4 = (i >> 24) & 255;
         return ((int)c1 << 24) + ((int)c2 << 16) + ((int)c3 << 8) + c4;
-    };
+ };
 
 static size_t my_fwrite(void *buffer, size_t size, size_t nmemb, void *stream);
 static size_t my_fwrite(void *buffer, size_t size, size_t nmemb, void *stream);
@@ -70,30 +94,6 @@ inline MatrixXf sigmoidDerivative(MatrixXf& input) {
 inline MatrixXf costDerivative(MatrixXf output, MatrixXf y){
     return (output - y);
 }
-
-struct BiasWts {
-    std::vector<MatrixXf> weights;
-    std::vector<MatrixXf> biases;
-};
-typedef struct BiasWts NNetWts;
-NNetWts BWts;
-
-// Mersenne Twister is a pseudorandom number generator but very slow
-/*
-std::random_device rd;
-std::mt19937 gen{rd()};
-*/
-
-//Works fine on VS/Intel c++ compiler. mingw implementation is deterministic(zero entropy), so same output for every run of the program.
-/*
-std::random_device rd;
-std::default_random_engine gen{ rd() };//seed_seq is to increase the entropy of the generated sequence initialized from multiple numbers
-*/
-
-//if your system does not have a random device then you can use time(0) as a seed to the random_engine
-
-unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
-std::default_random_engine gen(seed);
 
 void RandomShuffle(MatrixXf& A, Map<VectorXi> &l_in){
     VectorXi indices = VectorXi::LinSpaced(A.rows(), 0, A.rows());
@@ -171,7 +171,7 @@ void sgdMiniBatch(MatrixXf data, VectorXi l_in){
 auto normaldist(float dummy) {
 	std::normal_distribution<float> nd(0.0, 1.0);
     return nd(gen);
-    }
+}
 
 int main(int argc, char **argv) {
     std::string name = "MnistData";
