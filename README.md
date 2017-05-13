@@ -1,6 +1,6 @@
 # NNetEigen 
 
-A fast matrix-based approach to computing the output from a Multi layer perceptron neural network using Stochastic gradient descent  
+A fast matrix-based approach for computing the output from a Multi layer perceptron neural network using Stochastic gradient descent  
 
 ### Usage
 
@@ -17,4 +17,4 @@ g++ -O3 -DNDEBUG -std=c++14 NNetFast.cpp -o NNetFast.exe  -I"eigenSrc" \
 
 ## Reference
 
- http://neuralnetworksanddeeplearning.com/chap2.html "Michael Nielson"
+Neural Networks and Deep Learning  http://neuralnetworksanddeeplearning.com/chap2.html  via "Michael Nielson"
