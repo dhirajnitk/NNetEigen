@@ -5,7 +5,8 @@ A fast matrix-based approach to computing the output from a kMulti layer percept
 ### Usage
 
 The code works on visual studio and Mingw. It has MKL support and it can be build with Intel C++ compiler as well. 
-Mingw 
+
+G++ command for Mingw 
 
 ```
 g++ -O3 -DNDEBUG -std=c++14 NNetFast.cpp -o NNetFast.exe  -I"eigenSrc" \
